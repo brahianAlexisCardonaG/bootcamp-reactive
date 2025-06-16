@@ -1,0 +1,29 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: bootcamp
+  r2dbc:
+      url: r2dbc:postgresql://localhost:5432/bootcamp
+      username: postgres
+      password: root
+  sql:
+    init:
+      mode:
+      schema-locations: classpath:schema.sql
+  logging:
+    level:
+      org.springframework.web.reactive.function.server: DEBUG
+      org.springframework.web.reactive.function.client.ExchangeFunctions: TRACE
+  data:
+    mongodb:
+      uri: mongodb+srv://userimages:Mbw5MTVfsk8baWb4@bootcamp.n8g1qt9.mongodb.net/bootcamp?retryWrites=true&w=majority&appName=Bootcamp
+application:
+  security:
+    jwt:
+      secret-key: m2yrnAnikqppG3cqmTOGXExVuVlLxOvaN5q2Gqwel/aigX+wgP68HvbE1ypcpUBv
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
