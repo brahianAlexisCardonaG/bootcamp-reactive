@@ -17,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.context.Context;
 
@@ -42,7 +43,8 @@ public class BootcampHandlerImpl {
         Mono<ServerResponse> response = validateRequestSave
                 .validateAndMapRequest(request)            // Mono<SomeDto>
                 .map(bootcampMapper::toBootcamp)
-                .transform(bootcampServicePort::saveBootcampCapability)
+                .collectList()
+                .flatMap(bootcampServicePort::saveBootcampCapability)
                 .flatMap(listData -> {
                     List<BootcampListCapabilityTechnologyResponse> responseList = listData.stream()
                             .map(bootcampMapperResponse::toBootcampListCapabilityTechnologyResponse)
@@ -59,7 +61,7 @@ public class BootcampHandlerImpl {
                             );
                 })
                 .contextWrite(Context.of(X_MESSAGE_ID, ""))
-                .doOnError(ex -> log.error(BOOTCAMP_ERROR, ex)).next();
+                .doOnError(ex -> log.error(BOOTCAMP_ERROR, ex));
         return applyErrorHandler.applyErrorHandling(response);
     }
 
@@ -123,6 +125,7 @@ public class BootcampHandlerImpl {
                 .toList();
 
         Mono<ServerResponse> response = bootcampServicePort.getBootcampsByIds(ids)
+                .flatMapMany(Flux::fromIterable)
                 .map(bootcampMapper::toBootcampDto)
                 .collectList()
                 .flatMap(boot -> ServerResponse.ok()

@@ -7,4 +7,5 @@ import org.mapstruct.Mapper;
 @Mapper(componentModel = "spring")
 public interface BootcampMongoEntityMapper {
     BootcampMongoEntity toEntity(BootcampMongo bootcampMongo);
+    BootcampMongo toModel(BootcampMongoEntity bootcampMongoEntity);
 }

@@ -12,14 +12,14 @@ import java.util.Set;
 
 @Component
 public class BootcampValidationDto {
-    public Mono<BootcampDto> validateLengthWords(BootcampDto dto) {
+    public Mono<Void> validateLengthWords(BootcampDto dto) {
         if (dto.getName().length() > 50) {
             return Mono.error(new BusinessException(TechnicalMessage.NAME_TOO_LONG));
         }
-        return Mono.just(dto);
+        return Mono.empty();
     }
 
-    public Mono<List<BootcampDto>> validateNoDuplicateNames(List<BootcampDto> dtoList) {
+    public Mono<Void> validateNoDuplicateNames(List<BootcampDto> dtoList) {
         Set<String> names = new HashSet<>();
         List<String> duplicatedNames = dtoList.stream()
                 .map(BootcampDto::getName)
@@ -30,14 +30,14 @@ public class BootcampValidationDto {
             return Mono.error(new BusinessException(TechnicalMessage.DUPLICATE_NAMES_BOOTCAMP));
         }
 
-        return Mono.just(dtoList);
+        return Mono.empty();
     }
 
-    public Mono<BootcampDto> validateFieldNotNullOrBlank(BootcampDto dto) {
+    public Mono<Void> validateFieldNotNullOrBlank(BootcampDto dto) {
         if (dto.getName() == null || dto.getDuration() == null  || dto.getCapabilityIds().isEmpty()
         || dto.getReleaseDate() == null) {
             return Mono.error(new BusinessException(TechnicalMessage.INVALID_PARAMETERS));
         }
-        return Mono.just(dto);
+        return Mono.empty();
     }
 }

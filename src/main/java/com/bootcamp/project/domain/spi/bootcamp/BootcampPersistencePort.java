@@ -7,7 +7,8 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 public interface BootcampPersistencePort {
-    Flux<Bootcamp> save(Flux<Bootcamp> bootcampFlux);
+    Mono<Bootcamp> save(Bootcamp bootcamp);
     Mono<Boolean> findByName(String name);
     Mono<List<Bootcamp>> findByAllIds(List<Long> ids);
+    Mono<Void> delete(List<Long> idBootcamps);
 }

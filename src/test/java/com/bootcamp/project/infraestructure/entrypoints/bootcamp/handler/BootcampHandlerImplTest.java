@@ -1,6 +1,7 @@
 package com.bootcamp.project.infraestructure.entrypoints.bootcamp.handler;
 
 import com.bootcamp.project.domain.api.BootcampServicePort;
+import com.bootcamp.project.domain.enums.TechnicalMessage;
 import com.bootcamp.project.domain.model.bootcamp.Bootcamp;
 import com.bootcamp.project.domain.model.bootcamp.BootcampListCapabilityTechnology;
 import com.bootcamp.project.infraestructure.entrypoints.bootcamp.dto.BootcampDto;
@@ -11,6 +12,7 @@ import com.bootcamp.project.infraestructure.entrypoints.bootcamp.validate.Valida
 import com.bootcamp.project.infraestructure.entrypoints.bootcamp.mapper.BootcampMapperResponse;
 import com.bootcamp.project.infraestructure.entrypoints.bootcamp.response.api.ApiBootcampCapabilityTechnologyResponseList;
 import com.bootcamp.project.infraestructure.entrypoints.bootcamp.response.BootcampListCapabilityTechnologyResponse;
+import com.bootcamp.project.infraestructure.persistenceadapter.webclient.capability.response.CapabilityListTechnologyResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -25,6 +27,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 import static com.bootcamp.project.infraestructure.entrypoints.util.Constants.PATH_POST_BOOTCAMP_RELATE_CAPABILITIES;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -67,11 +70,27 @@ public class BootcampHandlerImplTest {
     @Test
     public void testCreateBootcampRelateCapabilities_Success() {
         // Arrange
-        BootcampDto bootcampDto = new BootcampDto(); // Puede inicializarse con valores de ser necesario
-        Bootcamp bootcamp = new Bootcamp();
-        BootcampListCapabilityTechnology capabilityEntity = new BootcampListCapabilityTechnology();
+        BootcampDto bootcampDto = new BootcampDto(); // Ajusta si necesitas campos específicos
+        Bootcamp bootcamp = Bootcamp.builder()
+                .id(1L)
+                .name("Java Camp")
+                .build();
+
+        // Simulación de entidad de dominio devuelta por el servicio
+        BootcampListCapabilityTechnology domainEntity = BootcampListCapabilityTechnology.builder()
+                .id(1L)
+                .name("Java Camp")
+                .capabilities(List.of())
+                .build();
+
+        // Simulación de respuesta a enviar al cliente
         BootcampListCapabilityTechnologyResponse capabilityResponse =
-                new BootcampListCapabilityTechnologyResponse();
+                BootcampListCapabilityTechnologyResponse.builder()
+                        .id(1L)
+                        .name("Java Camp")
+                        .capabilities(List.of()) // o agrega mocks si quieres
+                        .build();
+
 
         // Simulamos que validateRequestSave retorna un BootcampDto.
         when(validateRequestSave.validateAndMapRequest(any(ServerRequest.class)))
@@ -80,25 +99,12 @@ public class BootcampHandlerImplTest {
         // Se mapea el DTO a la entidad de dominio.
         when(bootcampMapper.toBootcamp(any(BootcampDto.class))).thenReturn(bootcamp);
 
-        // Importante: en lugar de usar thenReturn, usamos thenAnswer para obligar a consumir el flux,
-        // lo que disparará los operadores previos (incluyendo el map que debe invocar bootcampMapper.toBootcamp).
-        when(bootcampServicePort.saveBootcampCapability(any(Flux.class)))
-                .thenAnswer(invocation -> {
-                    Flux<Bootcamp> flux = invocation.getArgument(0);
-                    // Colectamos el flux y devolvemos un Mono con la lista esperada.
-                    return flux.collectList()
-                            .map(list -> {
-                                // En este punto, se debe haber llamado a bootcampMapper.toBootcamp.
-                                return List.of(capabilityEntity);
-                            });
-                });
+        when(bootcampServicePort.saveBootcampCapability(anyList()))
+                .thenReturn(Mono.just(List.of(domainEntity)));
 
-        // Se transforma la entidad guardada a la respuesta esperada.
-        when(bootcampMapperResponse
-                .toBootcampListCapabilityTechnologyResponse(any(BootcampListCapabilityTechnology.class)))
+        when(bootcampMapperResponse.toBootcampListCapabilityTechnologyResponse(any(BootcampListCapabilityTechnology.class)))
                 .thenReturn(capabilityResponse);
 
-        // Configuramos ApplyErrorHandler para devolver el mismo Mono sin modificar el flujo.
         when(applyErrorHandler.applyErrorHandling(any(Mono.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -106,23 +112,34 @@ public class BootcampHandlerImplTest {
         webTestClient.post()
                 .uri(PATH_POST_BOOTCAMP_RELATE_CAPABILITIES)
                 .contentType(MediaType.APPLICATION_JSON)
-                // Se envía un JSON simple (por ejemplo, un arreglo con un objeto vacío); ajústalo según el formato real de BootcampDto.
-                .bodyValue("[{}]")
+                .bodyValue("[{}]") // JSON de ejemplo, ajusta según tu BootcampDto real
                 .exchange()
                 .expectStatus().isCreated()
                 .expectHeader().contentType(MediaType.APPLICATION_JSON)
                 .expectBody(ApiBootcampCapabilityTechnologyResponseList.class)
                 .consumeWith(response -> {
-                    ApiBootcampCapabilityTechnologyResponseList responseBody = response.getResponseBody();
-                    // Aquí puedes agregar más aserciones sobre el cuerpo, por ejemplo:
-                    // assertEquals(TechnicalMessage.BOOTCAMP_CAPABILITY_RELATION.getCode(), responseBody.getCode());
-                    assert responseBody != null;
+                    ApiBootcampCapabilityTechnologyResponseList body = response.getResponseBody();
+                    assertThat(body).isNotNull();
+                    assertThat(body.getCode()).isEqualTo(TechnicalMessage.BOOTCAMP_CAPABILITY_RELATION.getCode());
+                    assertThat(body.getMessage()).isEqualTo(TechnicalMessage.BOOTCAMP_CAPABILITY_RELATION.getMessage());
+
+                    // 🔧 Aquí la solución explícita con cast:
+                    List<BootcampListCapabilityTechnologyResponse> data = (List<BootcampListCapabilityTechnologyResponse>) body.getData();
+                    assertThat(data).isNotNull();
+                    assertThat(data.size()).isEqualTo(1); // <-- en lugar de .hasSize(1)
+
+                    BootcampListCapabilityTechnologyResponse item = data.get(0);
+                    assertThat(item.getId()).isEqualTo(1L);
+                    assertThat(item.getName()).isEqualTo("Java Camp");
+
+                    List<CapabilityListTechnologyResponse> capabilities = item.getCapabilities();
                 });
 
-        // Verificamos que se invoquen los métodos según lo esperado:
+        // Verificaciones de invocaciones
         verify(validateRequestSave, times(1)).validateAndMapRequest(any(ServerRequest.class));
         verify(bootcampMapper, times(1)).toBootcamp(any(BootcampDto.class));
-        verify(bootcampServicePort, times(1)).saveBootcampCapability(any(Flux.class));
+        verify(bootcampServicePort, times(1)).saveBootcampCapability(anyList());
+        verify(bootcampMapperResponse, times(1)).toBootcampListCapabilityTechnologyResponse(any(BootcampListCapabilityTechnology.class));
         verify(applyErrorHandler, times(1)).applyErrorHandling(any(Mono.class));
     }
 

@@ -19,7 +19,9 @@ public enum TechnicalMessage {
     BOOTCAMP_CAPABILITY_FOUND("200","Capabilities by Bootcamps found",""),
     BOOTCAMPS_NOT_EXISTS("400", "Some of the Bootcamps are not registered.", ""),
     BOOTCAMPS_DELETE_SUCCESSFULLY("200"," The bootcamps was delete successfully." ,"" ),
-    BOOTCAMP_PERSON_MAX_NUMBER_PERSONS("200","Bootcamp with max number of person found","");
+    BOOTCAMP_PERSON_MAX_NUMBER_PERSONS("200","Bootcamp with max number of person found",""),
+    TECHNOLOGIES_NOT_EXISTS("400", "Some of the technologies are not registered.", ""),
+    BOOTCAMPS_ASSOCIATED_WITH_PEOPLE("404", "It is not possible to delete the bootcamp, as it is associated with certain people.","");
 
     private final String code;
     private final String message;

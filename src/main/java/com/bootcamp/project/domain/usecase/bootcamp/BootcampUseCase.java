@@ -7,6 +7,7 @@ import com.bootcamp.project.domain.model.bootcamp.Bootcamp;
 import com.bootcamp.project.domain.model.bootcamp.BootcampListCapabilityTechnology;
 import com.bootcamp.project.domain.model.bootcampmongo.BootcampMongo;
 import com.bootcamp.project.domain.model.webclient.capability.*;
+import com.bootcamp.project.domain.model.webclient.technology.Technology;
 import com.bootcamp.project.domain.spi.bootcamp.BootcampPersistencePort;
 import com.bootcamp.project.domain.spi.bootcampmongo.BootcampMongoPersistencePort;
 import com.bootcamp.project.domain.spi.webclient.CapabilityWebClientPort;
@@ -32,11 +33,11 @@ public class BootcampUseCase implements BootcampServicePort {
 
 
     @Override
-    public Mono<List<BootcampListCapabilityTechnology>> saveBootcampCapability(Flux<Bootcamp> bootcampFlux) {
+    public Mono<List<BootcampListCapabilityTechnology>> saveBootcampCapability(List<Bootcamp> bootcampsList) {
         return transactionalOperator.transactional(
 
                 // 1) Por cada Bootcamp entrante, validar y persistir
-                bootcampFlux
+                Flux.fromIterable(bootcampsList)
                         // 1.1) Validar que no exista otro bootcamp con el mismo nombre
                         .flatMap(incomingBootcamp ->
                                 bootcampPersistencePort.findByName(incomingBootcamp.getName())
@@ -66,10 +67,9 @@ public class BootcampUseCase implements BootcampServicePort {
                         )
                         // 1.3) Guardar el bootcamp y relacionar capabilities
                         .flatMap(validBootcamp ->
-                                bootcampPersistencePort.save(Flux.just(validBootcamp))
-                                        .next()
+                                bootcampPersistencePort.save(validBootcamp)
                                         .flatMap(savedEntity -> {
-                                            // savedEntity proviene de la BD (tiene id, name, releaseDate, duration)
+                                            // savedEntity proviene de la BD
                                             // validBootcamp tiene la lista capabilityIds original
                                             Bootcamp merged = new Bootcamp(
                                                     savedEntity.getId(),
@@ -173,7 +173,7 @@ public class BootcampUseCase implements BootcampServicePort {
                                                 })
                                                 .toList();
 
-                                        return bootcampMongoPersistencePort.saveAll(Flux.fromIterable(bootcampMongoList))
+                                        return bootcampMongoPersistencePort.saveAll(bootcampMongoList)
                                                 .thenReturn(resultList);
                                     });
                         })
@@ -194,7 +194,7 @@ public class BootcampUseCase implements BootcampServicePort {
                     return capabilityWebClientPort.getCapabilitiesByBootcampIds(bootcampIds)
                             .flatMap(response -> {
                                 if (response == null || response.getData() == null) {
-                                    return Mono.error(new RuntimeException("Technology o data es null"));
+                                    return Mono.error(new BusinessException(TechnicalMessage.TECHNOLOGIES_NOT_EXISTS));
                                 }
 
                                 // 2.1) Convertir Map<String, List<Capability>> → Map<Long, List<Capability>>
@@ -267,68 +267,99 @@ public class BootcampUseCase implements BootcampServicePort {
 
     @Override
     public Mono<Void> deleteBootcamps(List<Long> bootcampIds) {
-        return transactionalOperator.transactional(bootcampPersistencePort.findByAllIds(bootcampIds)
-                .flatMap(bootcamps -> {
-                    if (bootcamps.size() != bootcampIds.size()) {
-                        return Mono.error(
-                                new BusinessException(TechnicalMessage.BOOTCAMPS_NOT_EXISTS)
-                        );
-                    }
-                    return capabilityWebClientPort.getCapabilitiesByBootcampIds(bootcampIds);
-                }).flatMap(apiResponse ->
-                        // Convertimos el Map en un Flux para iterar sobre cada entrada (cada bootcamp y su lista de capacidades)
-                        Flux.fromIterable(apiResponse.getData().entrySet())
-                                .concatMap(entry -> {
-                                    // Para cada bootcamp, obtenemos su lista de capacidades
-                                    List<Capability> capabilities = entry.getValue();
-                                    // Extraemos los IDs de las capacidades de esa lista
-                                    List<Long> capabilityIds = capabilities.stream()
-                                            .map(Capability::getId)
-                                            .collect(Collectors.toList());
-                                    // Se invoca el metodo que elimina las capacidades de este bootcamp
-                                    return capabilityWebClientPort.deleteBootcampCapabilities(capabilityIds)
-                                            .thenReturn(capabilityIds);
-                                })
-                                // Una vez procesados todos los elementos, finalizamos el flujo
-                                .collectList()  // Consolidamos los capabilityIds (podrían repetirse, por lo que se filtran luego)
-                                .flatMapMany(capabilityIdsList -> {
-                                    // Aplanamos la lista resultante y eliminamos duplicados
-                                    List<Long> allCapabilityIds = capabilityIdsList.stream()
-                                            .flatMap(List::stream)
-                                            .distinct()
-                                            .collect(Collectors.toList());
-                                    // Con los capabilityIds consolidados, consultamos las technologies asociadas
-                                    return technologyWebClientPort.getTechnologiesByCapabilityIds(allCapabilityIds);
-                                })
-                                .flatMap(techApiResponse ->
-                                        Flux.fromIterable(techApiResponse.getData().entrySet())
-                                                .concatMap(entry -> {
-                                                    // Para cada capability, obtenemos su lista de TechnologyResponse
-                                                    return Flux.fromIterable(entry.getValue())
-                                                            // Si deseas procesar cada technology individualmente (por ejemplo, primero el id 5, luego el 4 y luego el 3)
-                                                            .concatMap(technology -> {
-                                                                // Llamamos a deleteCapabilityTechnologies pasando una lista con el id de la technology
-                                                                return technologyWebClientPort.deleteCapabilityTechnologies(
-                                                                        Collections.singletonList(technology.getId())
-                                                                );
-                                                            });
-                                                })
-                                )
-                                .then()
-                )
+        return transactionalOperator.transactional(
+                bootcampPersistencePort.findByAllIds(bootcampIds)
+                        .flatMap(bootcamps -> {
+                            if (bootcamps == null || bootcamps.size() != bootcampIds.size()) {
+                                return Mono.error(new BusinessException(TechnicalMessage.BOOTCAMPS_NOT_EXISTS));
+                            }
+
+                            return bootcampMongoPersistencePort.findByIdBootcamp(bootcampIds)
+                                    .flatMap(mongoDocs -> {
+                                        boolean hasPeople = mongoDocs.stream()
+                                                .anyMatch(doc -> doc.getNumberPersons() != null && doc.getNumberPersons() > 0);
+
+                                        if (hasPeople) {
+                                            return Mono.error(new BusinessException(TechnicalMessage.BOOTCAMPS_ASSOCIATED_WITH_PEOPLE));
+                                        }
+
+                                        return capabilityWebClientPort.getCapabilitiesByBootcampIds(bootcampIds)
+                                                .flatMap(apiResponse -> {
+                                                    if (apiResponse == null || apiResponse.getData() == null) {
+                                                        return Mono.error(new BusinessException(TechnicalMessage.CAPABILITIES_NOT_EXISTS));
+                                                    }
+                                                    // Eliminar capacidades
+                                                    return Flux.fromIterable(apiResponse.getData().entrySet())
+                                                            .concatMap(entry -> {
+                                                                List<Capability> capabilities = Optional.ofNullable(entry.
+                                                                        getValue())
+                                                                        .orElse(List.of());
+                                                                List<Long> capabilityIds = capabilities.stream()
+                                                                        .filter(Objects::nonNull)
+                                                                        .map(Capability::getId)
+                                                                        .filter(Objects::nonNull)
+                                                                        .collect(Collectors.toList());
+
+                                                                if (capabilityIds.isEmpty()) {
+                                                                    return Mono.just(List.<Long>of()); // devolver lista vacía
+                                                                }
+
+                                                                return capabilityWebClientPort.deleteBootcampCapabilities(capabilityIds)
+                                                                        .thenReturn(capabilityIds);
+                                                            })
+                                                            .collectList()
+                                                            .flatMapMany(capabilityIdsList -> {
+                                                                // Aplanar y filtrar duplicados
+                                                                List<Long> allCapabilityIds = capabilityIdsList.stream()
+                                                                        .flatMap(List::stream)
+                                                                        .distinct()
+                                                                        .collect(Collectors.toList());
+
+                                                                if (allCapabilityIds.isEmpty()) {
+                                                                    return Flux.empty(); // nada que borrar
+                                                                }
+
+                                                                return technologyWebClientPort.getTechnologiesByCapabilityIds(allCapabilityIds);
+                                                            })
+                                                            .flatMap(techApiResponse -> {
+                                                                if (techApiResponse == null || techApiResponse.getData() == null) {
+                                                                    return Mono.error(new BusinessException(TechnicalMessage.TECHNOLOGIES_NOT_EXISTS));
+                                                                }
+
+                                                                return Flux.fromIterable(techApiResponse.getData().entrySet())
+                                                                        .concatMap(entry -> {
+                                                                            List<Technology> technologies = Optional.ofNullable(entry
+                                                                                    .getValue())
+                                                                                    .orElse(List.of());
+
+                                                                            return Flux.fromIterable(technologies)
+                                                                                    .filter(Objects::nonNull)
+                                                                                    .map(Technology::getId)
+                                                                                    .filter(Objects::nonNull)
+                                                                                    .concatMap(techId -> technologyWebClientPort.deleteCapabilityTechnologies(List.of(techId)));
+                                                                        });
+                                                            })
+                                                            .then()
+                                                            .then(bootcampMongoPersistencePort.delete(bootcampIds))
+                                                            .then(bootcampPersistencePort.delete(bootcampIds));
+
+                                                });
+
+                                    });
+                        })
         );
     }
 
     @Override
-    public Flux<Bootcamp> getBootcampsByIds(List<Long> bootcampIds) {
+    public Mono<List<Bootcamp>> getBootcampsByIds(List<Long> bootcampIds) {
         return bootcampPersistencePort.findByAllIds(bootcampIds)
-                .flatMapMany(list -> {
+                .flatMap(list -> {
                     if (list.isEmpty()) {
-                        return Flux.error(
+                        return Mono.error(
                                 new BusinessException(TechnicalMessage.BOOTCAMPS_NOT_EXISTS)
                         );
                     }
-                    return Flux.fromIterable(list);
+                    return Mono.just(list);
                 });
     }
 }

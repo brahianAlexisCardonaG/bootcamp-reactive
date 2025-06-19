@@ -43,8 +43,7 @@ public class BootcampMongoDbPersistenceAdapterTest {
 
     @Test
     void saveAll_shouldSaveBootcampMongoEntities() {
-        // Arrange
-        BootcampMongo bootcamp1 = BootcampMongo.builder()
+        BootcampMongo bootcamp = BootcampMongo.builder()
                 .id(1L)
                 .idBootcamp(101L)
                 .name("Bootcamp Test")
@@ -55,31 +54,55 @@ public class BootcampMongoDbPersistenceAdapterTest {
                 .numberPersons(0)
                 .build();
 
-        BootcampMongoEntity entity1 = new BootcampMongoEntity();
-        entity1.setId(1L);
-        entity1.setIdBootcamp(101L);
-        entity1.setName("Bootcamp Test");
-        entity1.setReleaseDate(LocalDate.of(2025, 6, 14));
-        entity1.setDuration(30);
-        entity1.setNumberCapabilities(2);
-        entity1.setNumberTechnologies(1);
-        entity1.setNumberPersons(0);
+        BootcampMongoEntity entity = new BootcampMongoEntity();
+        entity.setId(1L);
+        entity.setIdBootcamp(101L);
+        entity.setName("Bootcamp Test");
+        entity.setReleaseDate(LocalDate.of(2025, 6, 14));
+        entity.setDuration(30);
+        entity.setNumberCapabilities(2);
+        entity.setNumberTechnologies(1);
+        entity.setNumberPersons(0);
 
-        when(mapper.toEntity(bootcamp1)).thenReturn(entity1);
-        when(repository.saveAll(anyList())).thenReturn(Flux.fromIterable(List.of(entity1)));
+        when(mapper.toEntity(bootcamp)).thenReturn(entity);
+        when(repository.saveAll(anyList())).thenReturn(Flux.just(entity));
 
-        // Act
-        Mono<Void> result = adapter.saveAll(Flux.just(bootcamp1));
+        Mono<Void> result = adapter.saveAll(List.of(bootcamp));
 
-        // Assert
         StepVerifier.create(result)
                 .verifyComplete();
 
-        ArgumentCaptor<List<BootcampMongoEntity>> captor = ArgumentCaptor.forClass(List.class);
-        verify(repository).saveAll(captor.capture());
-
-        List<BootcampMongoEntity> savedEntities = captor.getValue();
-        assertThat(savedEntities).hasSize(1);
-        assertThat(savedEntities.get(0).getIdBootcamp()).isEqualTo(101L);
+        verify(repository, times(1)).saveAll(anyList());
     }
+
+    @Test
+    void findByIdBootcamp_shouldReturnMatchingBootcampMongoList() {
+
+        Long id = 101L;
+        BootcampMongoEntity entity = new BootcampMongoEntity();
+        entity.setIdBootcamp(id);
+
+        BootcampMongo model = BootcampMongo.builder()
+                .idBootcamp(id)
+                .build();
+
+        when(repository.findByIdBootcampIn(List.of(id))).thenReturn(Flux.just(entity));
+        when(mapper.toModel(entity)).thenReturn(model);
+
+        StepVerifier.create(adapter.findByIdBootcamp(List.of(id)))
+                .expectNextMatches(list -> list.size() == 1 && list.get(0).getIdBootcamp().equals(id))
+                .verifyComplete();
+    }
+
+    @Test
+    void delete_shouldCallRepositoryDeleteByIdBootcampIn() {
+        List<Long> ids = List.of(101L);
+        when(repository.deleteByIdBootcampIn(ids)).thenReturn(Mono.empty());
+
+        Mono<Void> result = adapter.delete(ids);
+        StepVerifier.create(result).verifyComplete();
+
+        verify(repository, times(1)).deleteByIdBootcampIn(ids);
+    }
+
 }

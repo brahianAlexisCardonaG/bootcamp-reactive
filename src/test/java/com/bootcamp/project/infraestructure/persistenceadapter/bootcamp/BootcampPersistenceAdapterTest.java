@@ -55,20 +55,15 @@ public class BootcampPersistenceAdapterTest {
 
     @Test
     void save_whenCalled_persistsAndMapsBack() {
-        Flux<Bootcamp> domainFlux = Flux.just(sampleDomain);
-
         when(bootcampEntityMapper.toEntity(sampleDomain)).thenReturn(sampleEntity);
-
-        when(bootcampRepository.saveAll(ArgumentMatchers.anyList()))
-                .thenReturn(Flux.just(sampleEntity));
-
+        when(bootcampRepository.save(sampleEntity)).thenReturn(Mono.just(sampleEntity));
         when(bootcampEntityMapper.toModel(sampleEntity)).thenReturn(sampleDomain);
 
-        // Ejecutar el método save
-        Flux<Bootcamp> resultFlux = adapter.save(domainFlux);
+        // Act
+        Mono<Bootcamp> resultMono = adapter.save(sampleDomain);
 
-        // Verificar que el resultado emite el Bootcamp mapeado
-        StepVerifier.create(resultFlux)
+        // Assert
+        StepVerifier.create(resultMono)
                 .expectNextMatches(b ->
                         b.getId().equals(sampleDomain.getId()) &&
                                 b.getName().equals(sampleDomain.getName()) &&
@@ -78,9 +73,9 @@ public class BootcampPersistenceAdapterTest {
                 )
                 .verifyComplete();
 
-        // Verificar interacciones con mocks
+        // Verify interactions
         verify(bootcampEntityMapper, times(1)).toEntity(sampleDomain);
-        verify(bootcampRepository, times(1)).saveAll(ArgumentMatchers.anyList());
+        verify(bootcampRepository, times(1)).save(sampleEntity);
         verify(bootcampEntityMapper, times(1)).toModel(sampleEntity);
     }
 

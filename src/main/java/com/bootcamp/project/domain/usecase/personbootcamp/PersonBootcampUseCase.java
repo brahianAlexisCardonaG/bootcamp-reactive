@@ -1,6 +1,8 @@
 package com.bootcamp.project.domain.usecase.personbootcamp;
 
 import com.bootcamp.project.domain.api.PersonBootcampServicePort;
+import com.bootcamp.project.domain.enums.TechnicalMessage;
+import com.bootcamp.project.domain.exception.BusinessException;
 import com.bootcamp.project.domain.model.personbootcamp.PersonListBootcampCapTech;
 import com.bootcamp.project.domain.model.webclient.capability.Capability;
 import com.bootcamp.project.domain.model.webclient.capability.CapabilityTechnology;
@@ -27,7 +29,7 @@ public class PersonBootcampUseCase implements PersonBootcampServicePort {
                     // Extraemos la información del bootcamp
                     BootcampPersonList bootcamp = apiBootcampPersonList.getData();
                     if (bootcamp == null || bootcamp.getIdBootcamp() == null) {
-                        return Mono.error(new RuntimeException("No se encontró información del Bootcamp"));
+                        return Mono.error(new BusinessException(TechnicalMessage.BOOTCAMP_NOT_EXISTS));
                     }
                     Long bootcampId = bootcamp.getIdBootcamp();
 

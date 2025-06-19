@@ -17,11 +17,8 @@ public class BootcampPersistenceAdapter implements BootcampPersistencePort {
     private final BootcampRepository bootcampRepository;
 
     @Override
-    public Flux<Bootcamp> save(Flux<Bootcamp> bootcampFlux) {
-        return bootcampFlux
-                .map(bootcampEntityMapper::toEntity)
-                .collectList()
-                .flatMapMany(bootcampRepository::saveAll)
+    public Mono<Bootcamp> save(Bootcamp bootcamp) {
+        return bootcampRepository.save(bootcampEntityMapper.toEntity(bootcamp))
                 .map(bootcampEntityMapper::toModel);
     }
 
@@ -36,9 +33,15 @@ public class BootcampPersistenceAdapter implements BootcampPersistencePort {
     @Override
     public Mono<List<Bootcamp>> findByAllIds(List<Long> ids) {
         return Flux.fromIterable(ids)
-                .collectList() // opcional, si ids ya viene como lista
-                .flatMapMany(bootcampRepository::findAllById)// devuelve Flux<Capability>
+                .collectList()
+                .flatMapMany(bootcampRepository::findAllById)
                 .map(bootcampEntityMapper::toModel)
                 .collectList();
+    }
+
+    @Override
+    public Mono<Void> delete(List<Long> idBootcamps) {
+        return bootcampRepository.deleteAllById(idBootcamps)
+                .then();
     }
 }

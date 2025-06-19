@@ -14,9 +14,14 @@ public class ValidateRequestSave {
     public Flux<BootcampDto> validateAndMapRequest(ServerRequest request) {
         return request.bodyToFlux(BootcampDto.class)
                 .collectList()
-                .flatMap(bootcampValidationDto::validateNoDuplicateNames)
-                .flatMapMany(Flux::fromIterable)
-                .flatMap(bootcampValidationDto::validateFieldNotNullOrBlank)
-                .flatMap(bootcampValidationDto::validateLengthWords);
+                .flatMapMany(dtoList ->
+                        bootcampValidationDto.validateNoDuplicateNames(dtoList)
+                                .thenMany(Flux.fromIterable(dtoList))
+                )
+                .flatMap(dto ->
+                        bootcampValidationDto.validateLengthWords(dto)
+                                .then(bootcampValidationDto.validateFieldNotNullOrBlank(dto))
+                                .thenReturn(dto)
+                );
     }
 }
